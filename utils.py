@@ -3,7 +3,24 @@ import os
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
 import torchvision.utils as vutils
+
+def check_existing_latents(latent_path: str, min_files: int = 1) -> bool:
+    if not os.path.exists(latent_path):
+        print(f"Latent directory {latent_path} does not exist.")
+        return False
+    
+    pickle_files = glob.glob(os.path.join(latent_path, "*.pkl"))
+    num_files = len(pickle_files)
+    
+    if num_files >= min_files:
+        print(f"Found {num_files} existing latent files in {latent_path}. Skipping encoding.")
+        return True
+    else:
+        print(f"Found only {num_files} latent files in {latent_path}. Need at least {min_files}. Will encode images.")
+        return False
 
 def load_latents(latent_path):
     latent_maps = {}

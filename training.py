@@ -2,6 +2,9 @@ import hydra
 import torch
 import numpy as np
 import random
+import os
+import glob
+import wandb
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import to_absolute_path
@@ -15,6 +18,7 @@ from model.dit import DiT
 from model.diffusion import DiffusionModel
 from dataset.calebahq import CelebAHQDataset
 from schedulers import build_warmup_cosine
+from utils import check_existing_latents
 
 def set_seed(seed: int):
     random.seed(seed)
@@ -24,10 +28,18 @@ def set_seed(seed: int):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
     
 @hydra.main(config_path="config", config_name="config", version_base=None)
 def main(cfg: DictConfig):
     set_seed(cfg.train.seed)
+    
+    if cfg.wandb.logging:
+        wandb.init(
+            project=cfg.wandb.project_name,
+            name=cfg.wandb.run_name,
+            config=OmegaConf.to_container(cfg, resolve=True),
+        )
     
     print(OmegaConf.to_yaml(cfg, resolve=True))
     
@@ -40,22 +52,29 @@ def main(cfg: DictConfig):
         T.Normalize([0.5], [0.5])
     ])
     
-    train_dataset_imgs = CelebAHQDataset(
-        cfg.data.img_path, 
-        transform=transform, 
-        mode="image", 
-        return_name=True
-        )
+    latent_path = cfg.data.latent_path
+    latents_exist = check_existing_latents(latent_path, min_files=1)
     
-    train_loader_imgs = DataLoader(
-        train_dataset_imgs, 
-        batch_size=8, 
-        shuffle=False, 
-        num_workers=4,
-        pin_memory=True
-        )
-    
-    make_latents(train_loader_imgs, device)
+    if not latents_exist:
+        print("Creating latents from images...")
+        train_dataset_imgs = CelebAHQDataset(
+            cfg.data.img_path, 
+            transform=transform, 
+            mode="image", 
+            return_name=True
+            )
+        
+        train_loader_imgs = DataLoader(
+            train_dataset_imgs, 
+            batch_size=8, 
+            shuffle=False, 
+            num_workers=4,
+            pin_memory=True
+            )
+        
+        make_latents(train_loader_imgs, device, save_dir=latent_path)
+    else:
+        print("Using existing latents.")
     
     train_dataset_latents = CelebAHQDataset(
         root_dir="data/celeba_hq_128",
@@ -94,7 +113,7 @@ def main(cfg: DictConfig):
                       betas=tuple(cfg.optimizer.betas),
                       weight_decay=cfg.optimizer.weight_decay)
 
-    total_steps = cfg.train.epochs * max(1, len(dl))
+    total_steps = cfg.train.epochs * max(1, len(latents_dataloader))
     warmup_steps = max(1, int(cfg.train.warmup_ratio * total_steps))
     scheduler = build_warmup_cosine(optimizer, total_steps, warmup_steps)
     
@@ -102,6 +121,8 @@ def main(cfg: DictConfig):
     scaler = GradScaler(enabled=use_amp)
     
     loss_lst = []
+    global_step = 0
+    
     for epoch in tqdm(range(cfg.train.epochs)):
         running = 0.0
         count = 0
@@ -125,12 +146,50 @@ def main(cfg: DictConfig):
             running += loss.item() * bsz
             count   += bsz
             loss_lst.append(loss.item())
+            
+            
+            current_lr = scheduler.get_last_lr()[0]
+            # wandb.log({
+            #     "train/loss": loss.item(),
+            #     "train/lr": current_lr,
+            #     "train/epoch": epoch,
+            #     "train/global_step": global_step,
+            #     "train/batch_size": bsz
+            # }, step=global_step)
+            
+            global_step += 1
 
+        epoch_loss = running / max(1, count)
         current_lr = scheduler.get_last_lr()[0]
-        print(f"Epoch: {epoch}  Loss (mean): {np.mean(loss_lst)}    Loss (epoch mean): {running / max(1, count):.6f}    LR: {current_lr:.2e}")
         
-    torch.save(model.state_dict(), "last.ckpt")
-    OmegaConf.save(cfg, "config_used.yaml")
+        if cfg.wandb.logging:
+            wandb.log({
+                "epoch/loss": epoch_loss,
+                "epoch/loss_mean": np.mean(loss_lst),
+                "epoch/lr": current_lr,
+                "epoch/epoch": epoch
+            }, step=global_step)
+        
+        print(f"Epoch: {epoch}  Loss (mean): {np.mean(loss_lst)}    Loss (epoch mean): {epoch_loss:.6f}    LR: {current_lr:.2e}")
+        
+    checkpoint_path = cfg.train.checkpoint_path
+    torch.save(model.state_dict(), checkpoint_path)
+    
+    config_path = "config_used.yaml"
+    OmegaConf.save(cfg, config_path)
+    
+    if cfg.wandb.logging:
+        wandb.save(checkpoint_path)
+        wandb.save(config_path)
+        
+        wandb.log({
+            "final/total_epochs": cfg.train.epochs,
+            "final/total_steps": global_step,
+            "final/final_loss": loss_lst[-1] if loss_lst else 0,
+            "final/avg_loss": np.mean(loss_lst) if loss_lst else 0
+        })
+        
+        wandb.finish()
     
 if __name__ == "__main__":
     main()

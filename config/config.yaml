@@ -22,6 +22,11 @@ train:
   grad_clip: 1.0
   warmup_ratio: 0.03
   seed: 42
+  checkpoint_path: "last.ckpt"
+
+eval:
+  num_samples: 8
+  sample_images_path: "generated_samples.jpg"
 
 data:
   img_path: "CelebAMask-HQ/CelebA-HQ-img"
@@ -30,6 +35,11 @@ data:
   num_workers: 4
   pin_memory: true
   shuffle: true
+
+wandb:
+  logging: false
+  project_name: "miniDiT"
+  run_name: None
 
 hydra:
   run:
