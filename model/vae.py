@@ -3,7 +3,7 @@ import torch
 from pathlib import Path
 from tqdm import tqdm
 from diffusers import AutoencoderKL
-from torch.cuda.amp import autocast
+from torch.amp import autocast
 
 
 def make_latents(train_loader, device, save_dir="latents_pkl", shard_size=2000):

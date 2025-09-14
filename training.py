@@ -10,7 +10,7 @@ from omegaconf import DictConfig, OmegaConf
 from hydra.utils import to_absolute_path
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 import torchvision.transforms as T
 
 from model.vae import make_latents
@@ -149,14 +149,6 @@ def main(cfg: DictConfig):
             
             
             current_lr = scheduler.get_last_lr()[0]
-            # wandb.log({
-            #     "train/loss": loss.item(),
-            #     "train/lr": current_lr,
-            #     "train/epoch": epoch,
-            #     "train/global_step": global_step,
-            #     "train/batch_size": bsz
-            # }, step=global_step)
-            
             global_step += 1
 
         epoch_loss = running / max(1, count)
@@ -182,12 +174,12 @@ def main(cfg: DictConfig):
         wandb.save(checkpoint_path)
         wandb.save(config_path)
         
-        wandb.log({
-            "final/total_epochs": cfg.train.epochs,
-            "final/total_steps": global_step,
-            "final/final_loss": loss_lst[-1] if loss_lst else 0,
-            "final/avg_loss": np.mean(loss_lst) if loss_lst else 0
-        })
+        # wandb.log({
+        #     "final/total_epochs": cfg.train.epochs,
+        #     "final/total_steps": global_step,
+        #     "final/final_loss": loss_lst[-1] if loss_lst else 0,
+        #     "final/avg_loss": np.mean(loss_lst) if loss_lst else 0
+        # })
         
         wandb.finish()
     
