@@ -31,11 +31,11 @@ cd miniDiT
 pip install -r requirements.txt
 ```
 - For setting up on CelebHQ, simply download the images from the official repo of CelebMASK HQ [here](https://github.com/switchablenorms/CelebAMask-HQ?tab=readme-ov-file).
-- Train
+- Train:
 ```
 python train.py model.hidden_size=512 model.num_layers=20 optimizer.lr=1e-4 train.epochs=50
 ```
-- Evaluation
+- Evaluation:
 ```
 python eval.py eval.num_samples=8
 ```
