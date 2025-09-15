@@ -173,14 +173,6 @@ def main(cfg: DictConfig):
     if cfg.wandb.logging:
         wandb.save(checkpoint_path)
         wandb.save(config_path)
-        
-        # wandb.log({
-        #     "final/total_epochs": cfg.train.epochs,
-        #     "final/total_steps": global_step,
-        #     "final/final_loss": loss_lst[-1] if loss_lst else 0,
-        #     "final/avg_loss": np.mean(loss_lst) if loss_lst else 0
-        # })
-        
         wandb.finish()
     
 if __name__ == "__main__":
